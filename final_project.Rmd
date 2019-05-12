@@ -29,9 +29,9 @@ library(gridExtra)
 For this project we will attempt to establish if there is an association between book metadata (such as book format, genre, sentiment), and NY Times bestseller rank or overall sales figures. We will be utilizing data from the New York Times books API and Amazon sales rank data. 
 
 Data sources:  
-- NY Times bestsellers from the NY Times API  
-- Amazon sales rank data from https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip  
-- Book reviews from the NY Times  
+* NY Times bestsellers from the NY Times API  
+* Amazon sales rank data from https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip  
+* Book reviews from the NY Times  
 
 
 ###1. Gather and Load Data  
@@ -85,10 +85,11 @@ for(i in 1:nrow(lists)){
 
 ```
 
-Amazon sales rank data was obtained from https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip.  Python was used to create a csv of the data.  Python code can be found here:  https://github.com/jitsen-design/Data-607-Final-Project/blob/master/amazon-sales-rank-data-for-print-and-kindle-books/code/amazonsalesranks.ipynb  
+Amazon sales rank data was obtained from https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip.  Python was used to create a csv of the data.  Python code can be found here:  
+https://github.com/jitsen-design/Data-607-Final-Project/blob/reviews/amazon-sales-rank-data-for-print-and-kindle-books/code/amazonsalesranks.ipynb
 
 Load the NY Times bestseller list data from the SQL database table to a data frame.  
-Load the Amazon sales rank data from the Google Doc csv to a data frame, send it to a table in the SQL database, and then reload.  
+Load the Amazon sales rank data from the GitHub csv to a data frame, send it to a table in the SQL database, and then reload.  
 
 ```{r load-data, warning=FALSE, message=FALSE}
 #connect to Google Cloud MySQL database
@@ -96,9 +97,7 @@ db <- dbConnect(MySQL(), user='data1', password='654321', dbname='db', host='35.
 
 #RMySQL::dbListTables(db)
 
-#load the Amazon sales rank data from the Google Doc
-#id <- "1GT0nqTeXQMv8ujJO2KBW00dIfOVMcJSk" # google file ID
-#sales_ranks <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id))
+#load the Amazon sales rank data from the GitHub csv
 sales_ranks <- read.csv("https://raw.githubusercontent.com/jitsen-design/Data-607-Final-Project/master/data/masterrankings.csv")
 #head(sales_ranks)
 
@@ -268,7 +267,7 @@ Python scraping code can be found here:  https://github.com/jitsen-design/Data-6
 Python was used to run linear regression and random forest regression for rank on the NY Times best seller list vs. weeks on the list, publisher, list title, review length, and sentiment.  A secondary regression analysis added in data from the Amazon sales rank data.  Finally, sentiment analysis by book genre (list title) was completed.  Python code found here:  https://github.com/jitsen-design/Data-607-Final-Project/blob/master/regression.ipynb  
 
 Sentiment analysis on the NY Times reviews revealed the following:  
-* Books on Advice, Expeditions and Culture appear to have the most positive sentiment.  
+* Books on advice, expeditions and culture appear to have the most positive sentiment.  
 * Books on celebrities,  fiction and business seemed to have lower sentiment.  
 
 The random forest regression analysis that included the Amazon sales rank data was the best model, with R^2 more than 60%.  The features of most importance in the regression were weeks on NY Tmes bestseller list, list title, and review sentiment.  
@@ -278,7 +277,7 @@ The random forest regression analysis that included the Amazon sales rank data w
 * NY Times API limits - Default is 10 calls/minute & 4,000/day. We requested limits to be increased to 30 calls/minute & 12,000/day in order to pull all bestseller lists in a timely fashion. 
 * The amount of data analyzed was severely limited by attrition:  
   + Matching Amazon ASIN to bestseller list ISBNs - we could only match 917   
-  + Out of all bestseller list entries we were able to scrape only 477 reviews  
+  + Out of all bestseller list entries, we were able to scrape only 477 reviews  
   + Only 38 entries ASINs were matched when merged with Amazon Sales Rank data  
   + Sentiment analysis can be skewed due to the topic of the book (crime novels, murder mysteries, etc. most likely show as negative sentiment)  
 
@@ -288,6 +287,6 @@ The random forest regression analysis that included the Amazon sales rank data w
 * Fiction books stay on the NY Times bestseller list longer than nonfiction.
 * Random forest regression analysis attained higher prediction of rank on NY Times bestseller list than linear regression with ridge penalty. 
 * In isolation, association between review sentiment and sales rank was inconclusive, however, in presence of other features, review sentiment was a significant predictor of rank using Random Forest Regressor.
-* Books on advice, expeditions, and culture have positive reviewn sentiment and books on celebrities, fiction, and business have lower review  sentiment.  
+* Books on advice, expeditions, and culture have positive review sentiment and books on celebrities, fiction, and business have lower review  sentiment.  
 
 
