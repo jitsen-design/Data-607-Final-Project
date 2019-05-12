@@ -1,0 +1,293 @@
+---
+title: "Data 607 Final Project - Analyzing Bestsellers"
+author: "Sheryl Piechocki, Jit Seneviratne, Eunice Ok, John Perez"
+date: "May 8, 2019"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+---
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(RMySQL)
+#install.packages("scales")
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(stringr)
+library(jsonlite)
+library(dplyr)
+library(gridExtra)
+```
+
+### Introduction  
+
+For this project we will attempt to establish if there is an association between book metadata (such as book format, genre, sentiment), and NY Times bestseller rank or overall sales figures. We will be utilizing data from the New York Times books API and Amazon sales rank data. 
+
+Data sources:  
+- NY Times bestsellers from the NY Times API  
+- Amazon sales rank data from https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip  
+- Book reviews from the NY Times  
+
+
+###1. Gather and Load Data  
+
+Pull all bestseller lists from NY Times API and load them to a table in Google Cloud SQL database  
+
+```{r NY Times Api, warning=FALSE, message=FALSE, eval=FALSE}
+apikey <- "********************"
+base_str <- "http://api.nytimes.com/svc/books/v3/lists/"
+
+lists <- fromJSON(paste(base_str,"names.json",apikey,sep=""))$results
+db <- dbConnect(MySQL(), user='data607', password='1234', dbname='db', host='35.226.66.59')    
+
+bestsellers <- data.frame()
+titles <- c()
+allrows <- 0
+for(i in 1:nrow(lists)){
+    startDate<-lists$oldest_published_date[[i]]
+    endDate<-lists$newest_published_date[[i]]
+    listname<-lists$list_name_encoded[[i]]
+    list_title <- lists$list_name[[i]]
+
+    #get the proper date interval for this list
+    if(lists$updated[[i]]=="WEEKLY"){
+        dates<- seq(as.Date(startDate), as.Date(endDate), by="weeks")
+    }else if(lists$updated[[i]]=="MONTHLY"){
+        dates<- seq(as.Date(startDate), as.Date(endDate), by="months")
+    }
+    
+    for(j in 1:length(dates)){
+        Sys.sleep(2)
+        query <- paste(base_str,dates[j],"/",listname,".json",apikey,sep="")
+        tryCatch(
+            {
+                results <- fromJSON(query)
+                tmp <- results[["results"]]$books %>% select(-c(buy_links,isbns))
+                tmp$list_title <- list_title
+                tmp$list_date <- dates[j]
+                bestsellers <- rbind(bestsellers,tmp)
+                dbWriteTable(db, value = tmp, name = "bestsellers2", append=TRUE) #write weekly list to MySQL
+                print(paste("Fetched: ", list_title, dates[[j]]))
+            },
+            error=function(cond) {print(paste("Unable to fetch:", query))}
+        )
+    }
+    
+}
+
+#optionally write to csv
+#write.csv(bestsellers,file="bestsellers.csv",row.names=FALSE)
+
+```
+
+Amazon sales rank data was obtained from https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip.  Python was used to create a csv of the data.  Python code can be found here:  https://github.com/jitsen-design/Data-607-Final-Project/blob/master/amazon-sales-rank-data-for-print-and-kindle-books/code/amazonsalesranks.ipynb  
+
+Load the NY Times bestseller list data from the SQL database table to a data frame.  
+Load the Amazon sales rank data from the Google Doc csv to a data frame, send it to a table in the SQL database, and then reload.  
+
+```{r load-data, warning=FALSE, message=FALSE}
+#connect to Google Cloud MySQL database
+db <- dbConnect(MySQL(), user='data1', password='654321', dbname='db', host='35.226.66.59')
+
+#RMySQL::dbListTables(db)
+
+#load the Amazon sales rank data from the Google Doc
+#id <- "1GT0nqTeXQMv8ujJO2KBW00dIfOVMcJSk" # google file ID
+#sales_ranks <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id))
+sales_ranks <- read.csv("https://raw.githubusercontent.com/jitsen-design/Data-607-Final-Project/master/data/masterrankings.csv")
+#head(sales_ranks)
+
+#send the Amazon sales rank data to a table in the MySQL database
+write.table(sales_ranks,file="tmp.txt", fileEncoding ="utf8")
+sales_ranks_utf8 <- read.table(file="tmp.txt",encoding="utf8") 
+dbWriteTable(db, "masterranks", sales_ranks_utf8, overwrite = TRUE)
+
+#load the NYT bestsellers data from the MySQL database
+best = dbSendQuery(db, "select * from bestsellers2 where list_title not like 'Combined%'")
+best_df = fetch(best, n=-1)
+
+#load the Amazon sales rank data from the MySQL database
+sales_ranks_2 = dbSendQuery(db, "select * from masterranks")
+ranks_df = fetch(sales_ranks_2, n=-1)
+```
+
+###2. Create NY Times Bestsellers Data Frame  
+
+Add two new columns, one for book format (hardcover, paperback, e-book) and one for book genre (fiction, nonfiction).  
+
+```{r create_best_df, warning=FALSE, message=FALSE}
+#Add a column for book format to the bestsellers df
+best_df$format <- ifelse(test = grepl("Combined", best_df$list_title), yes = "Combined", 
+                         no = ifelse(test = grepl("Hardcover", best_df$list_title), yes = "Hardcover", 
+                         no = ifelse(test = grepl("Paperback", best_df$list_title), yes = "Paperback", 
+                         no = ifelse(test = grepl("E-Book", best_df$list_title), yes = "E-Book", no = "Other"))))
+
+#Add a column for book genre to the bestsellers df
+best_df$genre <- ifelse(test = grepl("Nonfiction", best_df$list_title), yes = "Nonfiction", 
+                         no = ifelse(test = grepl("Fiction", best_df$list_title), yes = "Fiction", no = "Other"))
+
+#output best_df to csv
+#write.csv(best_df, file = "C:\\Users\\spiec\\Documents\\Sheryl\\CUNY MSDS\\DATA607\\Final Project\\best_df.csv", row.names = FALSE)
+
+```
+
+###3. Subset the NY Times Bestsellers by Format, Get Summary Statistics, Create Plots
+
+```{r subset_format, warning=FALSE, message=FALSE}
+
+#Create a subset df by format
+best_format_df <- subset(best_df, best_df$format %in% c("Hardcover", "Paperback", "E-Book"))
+
+#Get maximum number of weeks for each ISBN13 by list
+weeks_format_df <- best_format_df %>% group_by(primary_isbn13, format, list_title) %>% summarise(weeks = n())
+
+#Get maximum number of weeks for each ISBN13
+maxweeks_format_df <- weeks_format_df %>% group_by(primary_isbn13, format) %>% summarise(maxweeks = max(weeks))
+
+#summary statistics of maxweeks by format
+maxweeks_format_df %>% group_by(format) %>% summarize_at(vars(maxweeks), funs(mean, median, min, max, IQR, n()))
+
+plot1 <- ggplot(maxweeks_format_df, aes(x = maxweeks_format_df$maxweeks, color = maxweeks_format_df$format)) +
+  geom_histogram(binwidth = 1)  + coord_cartesian(xlim=c(0, 30), ylim=c(0, 2500)) + 
+  facet_wrap( ~ maxweeks_format_df$format) + 
+   xlab("") + 
+  ylab("Books (Count)") +
+  ggtitle("Histogram of Books by Weeks on NYT Bestseller List by Format") +
+   theme(legend.position = "none")
+
+plot2 <- ggplot(maxweeks_format_df, aes(x = maxweeks_format_df$maxweeks)) +
+  geom_histogram(aes(y = stat(density) * 1, color = maxweeks_format_df$format), binwidth = 1) + 
+    coord_cartesian(xlim=c(0, 30)) + facet_wrap( ~ maxweeks_format_df$format)  + 
+    xlab("Weeks on NYT Bestseller List") + ylab("Books (Density)") + 
+    #ggtitle("Histogram of Density of Books by Weeks on NYT Bestseller List by Format") +
+    theme(legend.position = "none")
+
+plot3 <- ggplot(maxweeks_format_df, aes(y = maxweeks_format_df$maxweeks, x = maxweeks_format_df$format, color = maxweeks_format_df$format)) +
+  geom_boxplot() + coord_cartesian(ylim=c(0, 17)) + ylab("Weeks on NYT Bestseller List") + xlab("") +
+  ggtitle("Boxplot of Weeks on NYT Bestseller List by Format") + theme(legend.position = "none") +
+  stat_summary(fun.y = mean, geom = "errorbar", 
+               aes(ymax = ..y.., ymin = ..y.., group = factor(maxweeks_format_df$format)),
+               width = 0.75, linetype = "dashed")
+
+
+grid.arrange(plot1, plot2)
+plot3
+
+```
+
+#### Book Format Conclusion  
+
+The summary statistics and plots of the data reveal that paperback books have the highest mean weeks (8.9 weeks) on the NY Times bestseller list.  Paperback books also have the highest interquartile range (6 weeks).  E-books have the lowest mean weeks (3.2 weeks) on the NY Times bestseller list and the lowest interquartile range (1 week).  From this data, we can conclude that paperback books tend to stay on the NY Times bestseller list longer than hardcover and e-books.  
+
+###4. Subset the NYT Bestsellers by Fiction vs. Nonfiction, Get Summary Statistics, Create Plots, Perform t-test
+
+```{r subset-genre, warning=FALSE, message=FALSE}
+#Create a subset df by genre
+best_genre_df <- subset(best_df, best_df$genre %in% c("Fiction", "Nonfiction"))
+
+#Get maximum number of weeks for each ISBN13 by list - genre subset
+weeks_genre_df <- best_genre_df %>% group_by(primary_isbn13, genre, list_title) %>% summarise(weeks = n())
+
+#Get maximum number of weeks for each ISBN13 - genre subset
+maxweeks_genre_df <- weeks_genre_df %>% group_by(primary_isbn13, genre) %>% summarise(maxweeks = max(weeks))
+
+#summary statistics of maxweeks by genre
+maxweeks_genre_df %>% group_by(genre) %>% summarize_at(vars(maxweeks), funs(mean, median, min, max, IQR, n()))
+
+plot4 <- ggplot(maxweeks_genre_df, aes(x = maxweeks_genre_df$maxweeks, color = maxweeks_genre_df$genre)) +
+  geom_histogram(binwidth = 1)  + coord_cartesian(xlim=c(0, 30), ylim=c(0, 4000)) + 
+  facet_wrap( ~ maxweeks_genre_df$genre) + xlab("") + ylab("Books (Count)") + 
+  ggtitle("Histogram of Books by Weeks on NYT Bestseller List by Genre") +
+   theme(legend.position = "none")
+
+plot5 <- ggplot(maxweeks_genre_df, aes(x = maxweeks_genre_df$maxweeks)) +
+  geom_histogram(aes(y = stat(density) * 1, color = maxweeks_genre_df$genre), binwidth = 1) + 
+    coord_cartesian(xlim=c(0, 30)) + facet_wrap( ~ maxweeks_genre_df$genre)  + 
+    xlab("Weeks on NYT Bestseller List") + ylab("Books (Density)") + 
+ #   ggtitle("Histogram of Density of Books by Weeks on NYT Bestseller List by Genre") +
+    theme(legend.position = "none")
+
+plot6 <- ggplot(maxweeks_genre_df, aes(y = maxweeks_genre_df$maxweeks, x = maxweeks_genre_df$genre, color = maxweeks_genre_df$genre)) +
+  geom_boxplot() + coord_cartesian(ylim=c(0, 13)) + ylab("Weeks on NYT Bestseller List") + xlab("") + 
+  ggtitle("Boxplot of Weeks on NYT Bestseller List by Genre") + theme(legend.position = "none") +
+  stat_summary(fun.y = mean, geom = "errorbar", 
+               aes(ymax = ..y.., ymin = ..y.., group = factor(maxweeks_genre_df$genre)),
+               width = 0.75, linetype = "dashed")
+
+grid.arrange(plot4, plot5)
+plot6
+
+t.test(maxweeks ~ genre, data=maxweeks_genre_df)
+```
+
+#### Book Genre Conclusion  
+
+The summary statistics and plots of the data reveal that nonfiction books have higher mean weeks (6.6 weeks) on the NY Times bestseller list than fiction (4.7 weeks).  Both fiction and nonfiction books have an interquartile range of 4 weeks.  The t-test comparing the mean weeks on the NY Times bestseller list of fiction and non-fiction books yields a t = -5.6644, with a p-value ~ 0.  Therefore, we can reject the null hypothesis and conclude the mean weeks on the NY Times bestseller list for fiction books is not equal to the mean weeks on the NY Times bestseller list for nonfiction books.  Further, we can conclude that nonfiction books tend to stay on the NY Times bestseller list longer than fiction books.  
+
+###5. Join the NYT Bestsellers data to the Amazon Sales Rank Data    
+
+```{r join-df, warning=FALSE, message=FALSE}
+#Join the ISBN/max weeks list to the sales rank data by ISBN
+join = dbSendQuery(db, "select * from masterranks mr
+inner join (
+                       select dd.primary_isbn10, max(dd.weeks) as max_weeks
+                       from (
+                       select primary_isbn10, list_title, count(*) as weeks
+                       from bestsellers2
+                       group by primary_isbn10, list_title) as dd
+                       group by dd.primary_isbn10 ) dd2
+                       on mr.ASIN = dd2.primary_isbn10;")
+join_df <- fetch(join, n=-1)
+
+regress <- lm(join_df$min_rank ~ join_df$max_weeks)
+summary(regress)
+
+dbDisconnect(db)
+
+```
+#### Amazon Sales Rank and NY Times Bestseller Weeks Association Conclusion  
+
+The linear regression model for Amazon sales rank data and weeks on the NY Times bestseller list is:  
+
+\[
+  \hat{Amazon sales rank} = 8737.74 - 69.18 * NYT weeks
+  \]
+
+The F-statistic is 16.66 and is significant with a p-value approximately equal to 0.  This model tells us that the longer a book is on the NY Times bestseller list, the lower the Amazon sales rank.  This result is as expected, since a lower sales rank would mean it was a better selling book.  
+
+
+###6. NY Times Reviews Analysis  
+
+Book reviews were scraped from the NY Times using Python.  
+Python scraping code can be found here:  https://github.com/jitsen-design/Data-607-Final-Project/blob/master/review_scraper.ipynb  
+Python was used to run linear regression and random forest regression for rank on the NY Times best seller list vs. weeks on the list, publisher, list title, review length, and sentiment.  A secondary regression analysis added in data from the Amazon sales rank data.  Finally, sentiment analysis by book genre (list title) was completed.  Python code found here:  https://github.com/jitsen-design/Data-607-Final-Project/blob/master/regression.ipynb  
+
+Sentiment analysis on the NY Times reviews revealed the following:  
+* Books on Advice, Expeditions and Culture appear to have the most positive sentiment.  
+* Books on celebrities,  fiction and business seemed to have lower sentiment.  
+
+The random forest regression analysis that included the Amazon sales rank data was the best model, with R^2 more than 60%.  The features of most importance in the regression were weeks on NY Tmes bestseller list, list title, and review sentiment.  
+
+###7. Challenges  
+
+* NY Times API limits - Default is 10 calls/minute & 4,000/day. We requested limits to be increased to 30 calls/minute & 12,000/day in order to pull all bestseller lists in a timely fashion. 
+* The amount of data analyzed was severely limited by attrition:  
+  + Matching Amazon ASIN to bestseller list ISBNs - we could only match 917   
+  + Out of all bestseller list entries we were able to scrape only 477 reviews  
+  + Only 38 entries ASINs were matched when merged with Amazon Sales Rank data  
+  + Sentiment analysis can be skewed due to the topic of the book (crime novels, murder mysteries, etc. most likely show as negative sentiment)  
+
+### Summary Conclusions  
+
+* Paperback books stay on the NY Times bestseller list longer than hardcover and e-books.  
+* Fiction books stay on the NY Times bestseller list longer than nonfiction.
+* Random forest regression analysis attained higher prediction of rank on NY Times bestseller list than linear regression with ridge penalty. 
+* In isolation, association between review sentiment and sales rank was inconclusive, however, in presence of other features, review sentiment was a significant predictor of rank using Random Forest Regressor.
+* Books on advice, expeditions, and culture have positive reviewn sentiment and books on celebrities, fiction, and business have lower review  sentiment.  
+
+
