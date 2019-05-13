@@ -299,9 +299,9 @@ div.tocify {
 <h3>Introduction</h3>
 <p>For this project we will attempt to establish if there is an association between book metadata (such as book format, genre, sentiment), and NY Times bestseller rank or overall sales figures. We will be utilizing data from the New York Times books API and Amazon sales rank data.</p>
 <p>Data sources:<br />
-- NY Times bestsellers from the NY Times API<br />
-- Amazon sales rank data from <a href="https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip" class="uri">https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip</a><br />
-- Book reviews from the NY Times</p>
+* NY Times bestsellers from the NY Times API<br />
+* Amazon sales rank data from <a href="https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip" class="uri">https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip</a><br />
+* Book reviews from the NY Times</p>
 </div>
 <div id="gather-and-load-data" class="section level3">
 <h3>1. Gather and Load Data</h3>
@@ -349,17 +349,16 @@ for(i in 1:nrow(lists)){
 
 #optionally write to csv
 #write.csv(bestsellers,file=&quot;bestsellers.csv&quot;,row.names=FALSE)</code></pre>
-<p>Amazon sales rank data was obtained from <a href="https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip" class="uri">https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip</a>. Python was used to create a csv of the data. Python code can be found here: <a href="https://github.com/jitsen-design/Data-607-Final-Project/blob/master/amazon-sales-rank-data-for-print-and-kindle-books/code/amazonsalesranks.ipynb" class="uri">https://github.com/jitsen-design/Data-607-Final-Project/blob/master/amazon-sales-rank-data-for-print-and-kindle-books/code/amazonsalesranks.ipynb</a></p>
+<p>Amazon sales rank data was obtained from <a href="https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip" class="uri">https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip</a>. Python was used to create a csv of the data. Python code can be found here:<br />
+<a href="https://github.com/jitsen-design/Data-607-Final-Project/blob/reviews/amazon-sales-rank-data-for-print-and-kindle-books/code/amazonsalesranks.ipynb" class="uri">https://github.com/jitsen-design/Data-607-Final-Project/blob/reviews/amazon-sales-rank-data-for-print-and-kindle-books/code/amazonsalesranks.ipynb</a></p>
 <p>Load the NY Times bestseller list data from the SQL database table to a data frame.<br />
-Load the Amazon sales rank data from the Google Doc csv to a data frame, send it to a table in the SQL database, and then reload.</p>
+Load the Amazon sales rank data from the GitHub csv to a data frame, send it to a table in the SQL database, and then reload.</p>
 <pre class="r"><code>#connect to Google Cloud MySQL database
 db &lt;- dbConnect(MySQL(), user='data1', password='654321', dbname='db', host='35.226.66.59')
 
 #RMySQL::dbListTables(db)
 
-#load the Amazon sales rank data from the Google Doc
-#id &lt;- &quot;1GT0nqTeXQMv8ujJO2KBW00dIfOVMcJSk&quot; # google file ID
-#sales_ranks &lt;- read.csv(sprintf(&quot;https://docs.google.com/uc?id=%s&amp;export=download&quot;, id))
+#load the Amazon sales rank data from the GitHub csv
 sales_ranks &lt;- read.csv(&quot;https://raw.githubusercontent.com/jitsen-design/Data-607-Final-Project/master/data/masterrankings.csv&quot;)
 #head(sales_ranks)
 
@@ -553,7 +552,7 @@ summary(regress)</code></pre>
 Python scraping code can be found here: <a href="https://github.com/jitsen-design/Data-607-Final-Project/blob/master/review_scraper.ipynb" class="uri">https://github.com/jitsen-design/Data-607-Final-Project/blob/master/review_scraper.ipynb</a><br />
 Python was used to run linear regression and random forest regression for rank on the NY Times best seller list vs. weeks on the list, publisher, list title, review length, and sentiment. A secondary regression analysis added in data from the Amazon sales rank data. Finally, sentiment analysis by book genre (list title) was completed. Python code found here: <a href="https://github.com/jitsen-design/Data-607-Final-Project/blob/master/regression.ipynb" class="uri">https://github.com/jitsen-design/Data-607-Final-Project/blob/master/regression.ipynb</a></p>
 <p>Sentiment analysis on the NY Times reviews revealed the following:<br />
-* Books on Advice, Expeditions and Culture appear to have the most positive sentiment.<br />
+* Books on advice, expeditions and culture appear to have the most positive sentiment.<br />
 * Books on celebrities, fiction and business seemed to have lower sentiment.</p>
 <p>The random forest regression analysis that included the Amazon sales rank data was the best model, with R^2 more than 60%. The features of most importance in the regression were weeks on NY Tmes bestseller list, list title, and review sentiment.</p>
 </div>
@@ -565,7 +564,7 @@ Python was used to run linear regression and random forest regression for rank o
 </li>
 <li>Matching Amazon ASIN to bestseller list ISBNs - we could only match 917<br />
 </li>
-<li>Out of all bestseller list entries we were able to scrape only 477 reviews<br />
+<li>Out of all bestseller list entries, we were able to scrape only 477 reviews<br />
 </li>
 <li>Only 38 entries ASINs were matched when merged with Amazon Sales Rank data<br />
 </li>
@@ -580,7 +579,7 @@ Python was used to run linear regression and random forest regression for rank o
 <li>Fiction books stay on the NY Times bestseller list longer than nonfiction.</li>
 <li>Random forest regression analysis attained higher prediction of rank on NY Times bestseller list than linear regression with ridge penalty.</li>
 <li>In isolation, association between review sentiment and sales rank was inconclusive, however, in presence of other features, review sentiment was a significant predictor of rank using Random Forest Regressor.</li>
-<li>Books on advice, expeditions, and culture have positive reviewn sentiment and books on celebrities, fiction, and business have lower review sentiment.</li>
+<li>Books on advice, expeditions, and culture have positive review sentiment and books on celebrities, fiction, and business have lower review sentiment.</li>
 </ul>
 </div>
 
