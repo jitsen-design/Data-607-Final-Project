@@ -86,7 +86,7 @@ for(i in 1:nrow(lists)){
 ```
 
 Amazon sales rank data was obtained from https://www.kaggle.com/ucffool/amazon-sales-rank-data-for-print-and-kindle-books#ranks.zip.  Python was used to create a csv of the data.  Python code can be found here:  
-https://github.com/jitsen-design/Data-607-Final-Project/blob/reviews/amazon-sales-rank-data-for-print-and-kindle-books/code/amazonsalesranks.ipynb
+https://github.com/jitsen-design/Data-607-Final-Project/blob/master/amazon-sales-rank-data-for-print-and-kindle-books/output/code/amazonsalesranks.ipynb
 
 Load the NY Times bestseller list data from the SQL database table to a data frame.  
 Load the Amazon sales rank data from the GitHub csv to a data frame, send it to a table in the SQL database, and then reload.  
